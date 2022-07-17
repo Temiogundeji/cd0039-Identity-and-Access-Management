@@ -5,6 +5,7 @@ import json
 
 database_filename = "database.db"
 project_dir = os.path.dirname(os.path.abspath(__file__))
+# print(project_dir)
 database_path = "sqlite:///{}".format(os.path.join(project_dir, database_filename))
 
 db = SQLAlchemy()
@@ -93,7 +94,7 @@ class Drink(db.Model):
             drink = Drink(title=req_title, recipe=req_recipe)
             drink.insert()
     '''
-
+    
     def insert(self):
         db.session.add(self)
         db.session.commit()
