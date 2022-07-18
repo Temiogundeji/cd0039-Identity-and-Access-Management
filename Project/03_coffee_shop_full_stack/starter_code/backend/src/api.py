@@ -1,4 +1,5 @@
 import os
+from threading import ExceptHookArgs
 from flask import Flask, request, jsonify, abort
 from sqlalchemy import exc
 import json
@@ -73,18 +74,22 @@ def retrieve_details(jwt):
 
 @app.route('/drinks', methods=["POST"])
 @requires_auth('post:drinks')
-def create_drink():
+def create_drink(payload):
     body = request.get_json()
-    new_drink_title = body['title']
-    new_drink_recipe = body['recipe']
-
+    print(body)
     try:
+        new_drink_title  = body.get("title", None)
+        new_drink_recipe = body.get("recipe", None)
+
+        print(type(new_drink_recipe))
+
+        if isinstance(new_drink_recipe, dict):
+            new_drink_recipe = [new_drink_recipe]
+
         drink_recipe = json.dumps(new_drink_recipe)
         new_drink = Drink(title=new_drink_title, recipe=drink_recipe)
-        formatted_drinks = [drink.long() for drink in new_drink]
+        formatted_drinks = [new_drink.long()]
         new_drink.insert()
-
-       
 
         return jsonify({
             "success": True,
@@ -107,19 +112,27 @@ def create_drink():
 '''
 @app.route("/drinks/<int:drink_id>", methods=["PATCH"])
 @requires_auth('patch:drinks')
-def update_drink(drink_id):
+def update_drink(payload, drink_id):
     body = request.get_json()
     try:
         drink = Drink.query.filter(Drink.id == drink_id).one_or_none()
         if drink is None:
-            abort(404)
-        
-        formatted_drink = [d.long() for d in drink]
+                abort(404)
+
+        if "title" in body:
+                drink.title = body.get("title")
+
+        if "recipe" in body:
+                drink.recipe = json.dumps(body.get("recipe"))
 
         drink.update()
 
-        return jsonify({"success": True, "drinks": formatted_drink})
-    except:
+        return jsonify(
+                {
+                    "success": True,
+                }
+            )
+    except: 
         abort(400)
 
 '''
@@ -134,7 +147,7 @@ def update_drink(drink_id):
 '''
 @app.route("/drinks/<int:drink_id>", methods=["DELETE"])
 @requires_auth('delete:drinks')
-def delete_drink(drink_id):
+def delete_drink(payload, drink_id):
     try:
         drink = Drink.query.filter(Drink.id == drink_id).one_or_none()
 
@@ -165,18 +178,28 @@ def unprocessable(error):
         "message": "unprocessable"
     }), 422
 
+@app.errorhandler(401)
+def unauthorized(error):
+    return jsonify({
+        "success": False,
+        "error": 401,
+        "message": 'Unathorized'
+    }), 401
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({
+        "success": False,
+        "error": 500,
+        "message": 'Internal Server Error'
+    }), 500
+
 
 '''
-@TODO implement error handlers using the @app.errorhandler(error) decorator
-    each error handler should return (with approprate messages):
-             jsonify({
-                    "success": False,
-                    "error": 404,
-                    "message": "resource not found"
-                    }), 404
-
+@TODO implement error handler for 404
+    error handler should conform to general task above
 '''
-
 @app.errorhandler(404)
 def not_found(error):
     return (
@@ -189,12 +212,14 @@ def not_found(error):
     )
 
 '''
-@TODO implement error handler for 404
-    error handler should conform to general task above
-'''
-
-
-'''
 @TODO implement error handler for AuthError
     error handler should conform to general task above
 '''
+
+@app.errorhandler(AuthError)
+def auth_error(error):
+    return jsonify({
+        "success": False,
+        "error": error.status_code,
+        "message": error.error['description']
+    }), error.status_code

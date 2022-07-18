@@ -1,3 +1,5 @@
+from pickle import TRUE
+from xml.etree.ElementTree import TreeBuilder
 from flask import Flask, request, abort
 import json
 from functools import wraps
@@ -7,9 +9,9 @@ from urllib.request import urlopen
 
 app = Flask(__name__)
 
-AUTH0_DOMAIN = 'dev-uowqkozr.us.auth0.com'
+AUTH0_DOMAIN = 'dev-7u1pqjan.us.auth0.com'
 ALGORITHMS = ['RS256']
-API_AUDIENCE = 'https://dev-uowqkozr.us.auth0.com/api/v2/'
+API_AUDIENCE = 'coffee'
 
 
 class AuthError(Exception):
@@ -94,31 +96,49 @@ def verify_decode_jwt(token):
                 'code': 'invalid_claims',
                 'description': 'Incorrect claims. Please, check the audience and issuer.'
             }, 401)
+
         except Exception:
             raise AuthError({
                 'code': 'invalid_header',
                 'description': 'Unable to parse authentication token.'
             }, 400)
+            
     raise AuthError({
                 'code': 'invalid_header',
                 'description': 'Unable to find the appropriate key.'
             }, 400)
 
+def check_permissions(permission, payload):
+    if 'permissions' not in payload: 
+        abort(401)
+    if permission not in payload['permissions']:
+        abort(403)
+    return True
 
-def requires_auth(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = get_token_auth_header()
-        try:
-            payload = verify_decode_jwt(token)
-        except:
-            abort(401)
-        return f(payload, *args, **kwargs)
+def requires_auth(permission=''):
+    def requires_auth_decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            jwt = get_token_auth_header()
+            try:
+                payload = verify_decode_jwt(jwt)
+            except:
+                abort(401)
+            check_permissions(permission, payload)
 
-    return wrapper
+            return f(payload, *args, **kwargs)
 
-@app.route('/headers')
-@requires_auth
-def headers(payload):
-    print(payload)
+        return wrapper
+    return requires_auth_decorator
+
+# @app.route('/headers')
+# @requires_auth
+# def headers(jwt):
+#     print(jwt)
+#     return 'Access Granted'
+
+@app.route('/drinks')
+@requires_auth('get:drinks')
+def headers(jwt):
+    print(jwt)
     return 'Access Granted'
